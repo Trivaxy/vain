@@ -2,9 +2,21 @@ module vain
 
 import regex
 
+type FNErrorCallback = fn (arg_1 string)
+
+type FNString2String = fn (arg_1 string) string
+
+struct LexRule {
+	id       string
+	str_rule string
+	callback FNString2String
+	is_regex bool
+	re       regex.RE
+}
+
 struct Lexer {
 	rules        []LexRule
-	err_callback fn (string) 
+	err_callback FNErrorCallback
 mut:
 	pos          int
 	input        string
@@ -14,93 +26,84 @@ pub fn (mut lexer Lexer) next() ?(string, string) {
 	if lexer.pos == lexer.input.len {
 		return none
 	}
-
 	for rule in lexer.rules {
-		if rule.regex {
-			mut regex, err, err_pos := regex.regex(rule.str_rule)
-
-			if err != 0 {
-				return error_with_code("invalid regex ${rule.str_rule} at position $err_pos", err)
-			}
-
+		if rule.is_regex {
+			mut regex := rule.re
 			start, end := regex.match_string(lexer.input[lexer.pos..])
-
 			if start != 0 {
 				continue
 			}
-
 			token := rule.callback(lexer.input[lexer.pos + start..lexer.pos + end])
 			lexer.pos += end
 			return rule.id, token
-		}
-		else {
+		} else {
 			read := lexer.input[lexer.pos..lexer.pos + rule.str_rule.len]
-
 			if rule.str_rule != read {
 				continue
 			}
-
 			token := rule.callback(read)
 			lexer.pos += rule.str_rule.len
 			return rule.id, token
 		}
 	}
-
 	lexer.err_callback(lexer.input[lexer.pos..])
 }
 
-struct LexRule {
-	id       string
-	str_rule string
-	callback fn (string) string
-	regex    bool
-}
-
-fn do_nothing (str string) string {
+fn do_nothing(str string) string {
 	return str
 }
 
-pub fn literal(tok_id string, str string) LexRule {
+pub fn literal(tok_id, str string) LexRule {
 	return LexRule{
-		id: tok_id,
-		str_rule: str,
-		callback: do_nothing,
-		regex: false
+		id: tok_id
+		str_rule: str
+		callback: do_nothing
+		is_regex: false
 	}
 }
 
-pub fn literal_callback(tok_id string, str string, cb fn (string) string) LexRule {
+pub fn literal_callback(tok_id, str string, cb FNString2String) LexRule {
 	return LexRule{
-		id: tok_id,
-		str_rule: str,
-		callback: cb,
-		regex: false
+		id: tok_id
+		str_rule: str
+		callback: cb
+		is_regex: false
 	}
 }
 
-pub fn regex(tok_id string, str string) LexRule {
-	return LexRule {
-		id: tok_id,
-		str_rule: str,
-		callback: do_nothing,
-		regex: true
+fn regexstring2re(restring string) regex.RE {
+	re, err, err_pos := regex.regex(restring)
+	if err != 0 {
+		panic('invalid regex $restring at position $err_pos, errcode: $err')
 	}
+	return re
 }
 
-pub fn regex_callback(tok_id string, str string, cb fn (string) string) LexRule {
+pub fn regex(tok_id, str string) LexRule {
 	return LexRule{
-		id: tok_id,
-		str_rule: str,
-		callback: cb,
-		regex: true
+		id: tok_id
+		str_rule: str
+		callback: do_nothing
+		is_regex: true
+		re: regexstring2re(str)
 	}
 }
 
-pub fn make_lexer(input string, rules []LexRule, err_cb fn (string)) Lexer {
+pub fn regex_callback(tok_id, str string, cb FNString2String) LexRule {
+	return LexRule{
+		id: tok_id
+		str_rule: str
+		callback: cb
+		is_regex: true
+		re: regexstring2re(str)
+	}
+}
+
+pub fn make_lexer(input string, rules []LexRule, err_cb FNErrorCallback) Lexer {
 	return Lexer{
-		rules: rules,
-		err_callback: err_cb,
-		pos: 0,
+		rules: rules
+		err_callback: err_cb
+		pos: 0
 		input: input
 	}
 }
