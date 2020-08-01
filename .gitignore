@@ -1,5 +1,7 @@
+vain_test
 main
 *.exe
 *.so
 *.dylib
 *.dll
+
